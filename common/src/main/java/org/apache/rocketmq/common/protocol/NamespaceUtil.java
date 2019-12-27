@@ -92,14 +92,17 @@ public class NamespaceUtil {
         String resourceWithoutRetryAndDLQ = withOutRetryAndDLQ(resourceWithOutNamespace);
         StringBuffer strBuffer = new StringBuffer();
 
+        //判断是否为重试队列
         if (isRetryTopic(resourceWithOutNamespace)) {
             strBuffer.append(MixAll.RETRY_GROUP_TOPIC_PREFIX);
         }
 
+        //判断是否为死信队列
         if (isDLQTopic(resourceWithOutNamespace)) {
             strBuffer.append(MixAll.DLQ_GROUP_TOPIC_PREFIX);
         }
 
+        // 在不变动“重试”和“死信”标记的基础上，把namespace加到topic上
         return strBuffer.append(namespace).append(NAMESPACE_SEPARATOR).append(resourceWithoutRetryAndDLQ).toString();
 
     }
