@@ -28,26 +28,34 @@ import org.apache.rocketmq.client.common.ThreadLocalIndex;
  * 延迟故障容错实现。维护每个对象的信息
  */
 public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> {
-    // 对象故障信息Table
+    /**
+     * 对象故障信息Table
+     */
     private final ConcurrentHashMap<String, FaultItem> faultItemTable = new ConcurrentHashMap<String, FaultItem>(16);
 
-    // 对象选择Index
+    /**
+     * 对象选择Index
+     * @see #pickOneAtLeast()
+     */
     private final ThreadLocalIndex whichItemWorst = new ThreadLocalIndex();
 
     @Override
     public void updateFaultItem(final String name, final long currentLatency, final long notAvailableDuration) {
         FaultItem old = this.faultItemTable.get(name);
         if (null == old) {
+            // 创建对象
             final FaultItem faultItem = new FaultItem(name);
             faultItem.setCurrentLatency(currentLatency);
             faultItem.setStartTimestamp(System.currentTimeMillis() + notAvailableDuration);
 
+            // 更新对象
             old = this.faultItemTable.putIfAbsent(name, faultItem);
             if (old != null) {
                 old.setCurrentLatency(currentLatency);
                 old.setStartTimestamp(System.currentTimeMillis() + notAvailableDuration);
             }
         } else {
+            // 更新对象
             old.setCurrentLatency(currentLatency);
             old.setStartTimestamp(System.currentTimeMillis() + notAvailableDuration);
         }
@@ -69,7 +77,8 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
 
     /**
      * 选择一个相对优秀的对象
-     * @return
+     *
+     * @return 对象
      */
     @Override
     public String pickOneAtLeast() {
@@ -82,7 +91,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         }
 
         if (!tmpList.isEmpty()) {
-            //先打乱再排序
+            //先打乱再排序。TODO 疑问：应该只能二选一。猜测Collections.shuffle(tmpList)去掉。
             Collections.shuffle(tmpList);
 
             Collections.sort(tmpList);
@@ -112,11 +121,17 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
      * 对象故障信息。维护对象的名字、延迟、开始可用的时间
      */
     class FaultItem implements Comparable<FaultItem> {
-        // 对象名
+        /**
+         * 对象名
+         */
         private final String name;
-        // 延迟
+        /**
+         * 延迟
+         */
         private volatile long currentLatency;
-        // 开始可用时间
+        /**
+         * 开始可用时间
+         */
         private volatile long startTimestamp;
 
         public FaultItem(final String name) {
@@ -126,8 +141,9 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         /**
          * 比较对象
          * 可用性 > 延迟 > 开始可以时间
-         * @param other
-         * @return
+         *
+         * @param other other
+         * @return 升序
          */
         @Override
         public int compareTo(final FaultItem other) {
@@ -156,7 +172,8 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
 
         /**
          * 是否可用：当开始可用时间大于当前时间
-         * @return
+         *
+         * @return 是否可用
          */
         public boolean isAvailable() {
             return (System.currentTimeMillis() - startTimestamp) >= 0;

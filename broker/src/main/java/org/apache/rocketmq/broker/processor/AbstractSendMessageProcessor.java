@@ -220,7 +220,7 @@ public abstract class AbstractSendMessageProcessor implements NettyRequestProces
             }
 
             // 若还是没配置，则报错提示进行手动创建topic配置
-            // 创建会存在不成功的情况，例如说：defaultTopic的Topic配置不存在，又或者存在但是不允许继承
+            // 创建会存在不成功的情况，例如说：defaultTopic的Topic配置不存在，又或者存在但是不允许继承，详细解析见《RocketMQ 源码分析 —— Topic》。
             if (null == topicConfig) {
                 response.setCode(ResponseCode.TOPIC_NOT_EXIST);
                 response.setRemark("topic[" + requestHeader.getTopic() + "] not exist, apply first please!"

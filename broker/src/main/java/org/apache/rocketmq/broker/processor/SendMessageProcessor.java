@@ -63,6 +63,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
     }
 
     /**
+     * 【入口】Message 发送与接收 - Broker 接收消息
      * 处理接收的消息请求
      *
      * @param ctx
@@ -94,6 +95,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 if (requestHeader.isBatch()) {
                     response = this.sendBatchMessage(ctx, request, mqtraceContext, requestHeader);
                 } else {
+                    // <a>
                     response = this.sendMessage(ctx, request, mqtraceContext, requestHeader);
                 }
 
@@ -267,7 +269,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
     private boolean handleRetryAndDLQ(SendMessageRequestHeader requestHeader, RemotingCommand response,
                                       RemotingCommand request,
                                       MessageExt msg, TopicConfig topicConfig) {
-        // 对RETRY类型的消息处理。如果超过最大消费次数，则topic修改成"%DLQ%" + 分组名，即加入死信队列(Dead Letter Queue)
+        // 对RETRY类型的消息处理。如果超过最大消费次数，则topic修改成"%DLQ%" + 分组名，即加入死信队列(Dead Letter Queue)，详细解析见：《RocketMQ 源码分析 —— Topic》
         String newTopic = requestHeader.getTopic();
         if (null != newTopic && newTopic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
             // 获取订阅分组配置
@@ -346,8 +348,9 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             return response;
         }
 
-        // 消息配置（Topic配置）校验         <a>
+        // 消息配置（Topic配置）校验
         response.setCode(-1);
+        // <a>  消息配置(Topic配置）校验，详细解析见：AbstractSendMessageProcessor#msgCheck()
         super.msgCheck(ctx, requestHeader, response);
         if (response.getCode() != -1) {
             return response;
@@ -368,7 +371,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         msgInner.setTopic(requestHeader.getTopic());
         msgInner.setQueueId(queueIdInt);
 
-        //处理是否重试和死信
+        //处理是否重试和死信 <b>
         if (!handleRetryAndDLQ(requestHeader, response, request, msgInner, topicConfig)) {
             return response;
         }
@@ -395,10 +398,11 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             }
             putMessageResult = this.brokerController.getTransactionalMessageService().prepareMessage(msgInner);
         } else {
+            // 存储消息，详细解析见：DefaultMessageStore#putMessage()  <c>
             putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
         }
 
-        // 添加消息
+        // 添加消息 <d>
         return handlePutMessageResult(putMessageResult, response, request, msgInner, responseHeader, sendMessageContext, ctx, queueIdInt);
 
     }
@@ -414,6 +418,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         }
         boolean sendOK = false;
 
+        // 处理消息发送结果，设置响应结果和提示
         switch (putMessageResult.getPutMessageStatus()) {
             // Success
             case PUT_OK:
@@ -465,6 +470,11 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
         String owner = request.getExtFields().get(BrokerStatsManager.COMMERCIAL_OWNER);
         if (sendOK) {
+            /*
+            【整个if代码块】发送成功，响应
+            这里doResponse(ctx, request, response)进行响应，最后return null
+            原因是：响应给 Producer 可能发生异常，#doResponse(ctx, request, response)捕捉了该异常并输出日志。这样做的话，我们进行排查 Broker 接收消息成功后响应是否存在异常会方便很多。
+             */
 
             // 统计
             this.brokerController.getBrokerStatsManager().incTopicPutNums(msg.getTopic(), putMessageResult.getAppendMessageResult().getMsgNum(), 1);
@@ -577,7 +587,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         messageExtBatch.setStoreHost(this.getStoreHost());
         messageExtBatch.setReconsumeTimes(requestHeader.getReconsumeTimes() == null ? 0 : requestHeader.getReconsumeTimes());
 
-        // <b>
+        // <a>
         PutMessageResult putMessageResult = this.brokerController.getMessageStore().putMessages(messageExtBatch);
 
         return handlePutMessageResult(putMessageResult, response, request, messageExtBatch, responseHeader, sendMessageContext, ctx, queueIdInt);

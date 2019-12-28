@@ -514,6 +514,23 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         this.mqFaultStrategy.updateFaultItem(brokerName, currentLatency, isolation);
     }
 
+    /**
+     * 发送消息
+     * 步骤：
+     *  1、获取消息路由信息
+     *  2、选择要发送到的消息队列
+     *  3、执行消息发送核心方法，并对发送结果进行封装返回。
+     *
+     * @param msg
+     * @param communicationMode
+     * @param sendCallback
+     * @param timeout
+     * @return
+     * @throws MQClientException
+     * @throws RemotingException
+     * @throws MQBrokerException
+     * @throws InterruptedException
+     */
     private SendResult sendDefaultImpl(
         Message msg,
         final CommunicationMode communicationMode,
@@ -525,7 +542,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         // 校验消息格式
         Validators.checkMessage(msg, this.defaultMQProducer);
 
-        // 调用编号；用于下面打印日志，标记为同一次发送消息
+        // 调用编号；用于下面打印日志，标记为同一次发送消息（invokeID仅仅用于打印日志，无实际的业务用途）
         final long invokeID = random.nextLong();
         long beginTimestampFirst = System.currentTimeMillis();
         long beginTimestampPrev = beginTimestampFirst;
@@ -537,7 +554,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             // 最后选择消息要发送到的队列实例
             MessageQueue mq = null;
             Exception exception = null;
-            // 最后一次发送结果
+            // 最后一次发送结果（下面四行代码：计算调用发送消息到成功为止的最大次数，并进行循环。同步或异步发送消息会调用多次，默认配置为3次）
             SendResult sendResult = null;
             int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
             //第几次发送
@@ -546,8 +563,9 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             String[] brokersSent = new String[timesTotal];
             // 循环调用timesTotal次数发送消息，直到成功
             for (; times < timesTotal; times++) {
+                // lastBrokerName第一次就是null，重试的时候才会有值
                 String lastBrokerName = null == mq ? null : mq.getBrokerName();
-                // 选择消息要发送到的队列   <b>
+                // 选择消息要发送到的队列   <b> 点两层
                 MessageQueue mqSelected = this.selectOneMessageQueue(topicPublishInfo, lastBrokerName);
                 if (mqSelected != null) {
                     mq = mqSelected;
@@ -568,7 +586,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         // 调用发送消息核心方法     <c>
                         sendResult = this.sendKernelImpl(msg, mq, communicationMode, sendCallback, topicPublishInfo, timeout - costTime);
                         endTimestamp = System.currentTimeMillis();
-                        // 更新Broker可用性信息,在选择发送到的消息队列时，会参考Broker发送消息的延迟
+                        // 更新Broker可用性信息,在选择发送到的消息队列时，会参考Broker发送消息的延迟 <d>
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false);
                         switch (communicationMode) {
                             case ASYNC:
@@ -588,7 +606,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         }
                         // 打印异常，更新Broker可用性信息，更新继续循环
                     } catch (RemotingException e) {
-                        //当抛出RemotingException时，如果进行消息发送失败重试，则可能导致消息发送重复。例如，发送消息超时(RemotingTimeoutException)，实际Broker接收到该消息并处理成功。因此，Consumer在消费时，需要保证幂等性。
+                        //当抛出RemotingException时，如果进行消息发送失败重试，则可能导致[!消息发送重复!]。例如，发送消息超时(RemotingTimeoutException)，实际Broker接收到该消息并处理成功。因此，Consumer在消费时，需要保证幂等性。
                         endTimestamp = System.currentTimeMillis();
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
                         log.warn(String.format("sendKernelImpl exception, resend at once, InvokeID: %s, RT: %sms, Broker: %s", invokeID, endTimestamp - beginTimestampPrev, mq), e);
@@ -686,6 +704,13 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             null).setResponseCode(ClientErrorCode.NOT_FOUND_TOPIC_EXCEPTION);
     }
 
+    /**
+     * 获得 Topic发布信息
+     * 优先从缓存的 topicPublishInfoTable ，其次从 Namesrv 中获得
+     *
+     * @param topic
+     * @return
+     */
     private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {
         // 从缓存中获取 Topic发布信息
         TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);
@@ -700,7 +725,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         if (topicPublishInfo.isHaveTopicRouterInfo() || topicPublishInfo.ok()) {
             return topicPublishInfo;
         } else {
-            //当从 Namesrv 无法获取时，DefaultMQProducer#createTopicKey对应的Topic发布信息。目的是当 Broker 开启自动创建 Topic开关时，Broker 接收到消息后自动创建Topic
+            // 当从 Namesrv 无法获取时，使用 {@link DefaultMQProducer#createTopicKey} 对应的 Topic发布信息。
+            // 目的是当 Broker 开启自动创建 Topic开关时，Broker 接收到消息后自动创建Topic，详细解析见《RocketMQ 源码分析 —— Topic》
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic, true, this.defaultMQProducer);
             topicPublishInfo = this.topicPublishInfoTable.get(topic);
             return topicPublishInfo;
@@ -741,12 +767,14 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             // 是否使用broker vip通道,broker会开启两个端口对外服务
             brokerAddr = MixAll.brokerVIPChannel(this.defaultMQProducer.isSendMessageWithVIPChannel(), brokerAddr);
 
+            // 记录消息内容。下面逻辑可能改变消息内容，例如消息压缩。
             byte[] prevBody = msg.getBody();
             try {
                 //for MessageBatch,ID has been set in the generating process
                 //对于MessageBatch，已在生成过程中设置了ID
                 if (!(msg instanceof MessageBatch)) {
                     // 若不是批量发送则设置唯一编号
+                    // 生产消息编号，详细解析见《RocketMQ 源码分析 —— Message 基础》。
                     MessageClientIDSetter.setUniqID(msg);
                 }
 
@@ -770,7 +798,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     sysFlag |= MessageSysFlag.TRANSACTION_PREPARED_TYPE;
                 }
 
-                // 发送消息校验
+                // hook：发送消息校验
                 if (hasCheckForbiddenHook()) {
                     CheckForbiddenContext checkForbiddenContext = new CheckForbiddenContext();
                     checkForbiddenContext.setNameSrvAddr(this.defaultMQProducer.getNamesrvAddr());
@@ -783,7 +811,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     this.executeCheckForbiddenHook(checkForbiddenContext);
                 }
 
-                // 发送消息前逻辑
+                // hook：发送消息前逻辑
                 if (this.hasSendMessageHook()) {
                     context = new SendMessageContext();
                     context.setProducer(this);
@@ -880,6 +908,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         if (timeout < costTimeSync) {
                             throw new RemotingTooMuchRequestException("sendKernelImpl call timeout");
                         }
+                        // 发起网络请求
                         sendResult = this.mQClientFactory.getMQClientAPIImpl().sendMessage(
                             brokerAddr,
                             mq.getBrokerName(),
@@ -895,7 +924,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         break;
                 }
 
-                // 发送消息后置逻辑
+                // hook：发送消息后逻辑
                 if (this.hasSendMessageHook()) {
                     context.setSendResult(sendResult);
                     this.executeSendMessageHookAfter(context);

@@ -24,15 +24,24 @@ import org.apache.rocketmq.common.message.MessageQueue;
 
 public class MQFaultStrategy {
     private final static InternalLogger log = ClientLogger.getLog();
-    // 延迟故障容错，维护每个Broker的发送消息的延迟
+    /**
+     * 延迟故障容错，维护每个Broker的发送消息的延迟
+     * key：brokerName
+     */
     private final LatencyFaultTolerance<String> latencyFaultTolerance = new LatencyFaultToleranceImpl();
 
-    // 发送消息延迟容错开关
+    /**
+     * 发送消息延迟容错开关（Producer消息发送容错策略。默认情况下容错策略关闭，即sendLatencyFaultEnable=false。）
+     */
     private boolean sendLatencyFaultEnable = false;
 
-    // 延迟级别数组
+    /**
+     * 延迟级别数组
+     */
     private long[] latencyMax = {50L, 100L, 550L, 1000L, 2000L, 3000L, 15000L};
-    // 不可用时长数组
+    /**
+     * 不可用时长数组
+     */
     private long[] notAvailableDuration = {0L, 0L, 30000L, 60000L, 120000L, 180000L, 600000L};
 
     public long[] getNotAvailableDuration() {
@@ -60,15 +69,16 @@ public class MQFaultStrategy {
     }
 
     /**
-     * @Description 根据Topic路由信息 选择一个消息队列
-     * @param       tpInfo
-     * @param       lastBrokerName
-     * @return      org.apache.rocketmq.common.message.MessageQueue
+     * 根据Topic路由信息 选择一个消息队列
+     *
+     * @param tpInfo         Topic发布信息
+     * @param lastBrokerName brokerName
+     * @return org.apache.rocketmq.common.message.MessageQueue 消息队列
      **/
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
         if (this.sendLatencyFaultEnable) {
             try {
-                // 获取 brokerName=lastBrokerName 并且 可用的一个消息队列
+                // 获取 brokerName=lastBrokerName && 可用的 一个消息队列
                 int index = tpInfo.getSendWhichQueue().getAndIncrement();
                 for (int i = 0; i < tpInfo.getMessageQueueList().size(); i++) {
                     int pos = Math.abs(index++) % tpInfo.getMessageQueueList().size();
@@ -81,7 +91,7 @@ public class MQFaultStrategy {
                     }
                 }
 
-                // 选择一个相对好的broker，并获得其对应的一个消息队列，不考虑该队列的可用性
+                // 选择一个相对好的broker，并获得其对应的一个消息队列，不考虑该队列的可用性 <a>
                 final String notBestBroker = latencyFaultTolerance.pickOneAtLeast();
                 int writeQueueNums = tpInfo.getQueueIdByBroker(notBestBroker);
                 if (writeQueueNums > 0) {
@@ -102,29 +112,41 @@ public class MQFaultStrategy {
             return tpInfo.selectOneMessageQueue();
         }
 
-        // 获得 lastBrokerName 对应的一个消息队列，不考虑该队列的可用性，未开启容错策略选择消息队列逻辑
+        // 获得 lastBrokerName 对应的一个消息队列，不考虑该队列的可用性（未开启容错策略选择消息队列逻辑）
         return tpInfo.selectOneMessageQueue(lastBrokerName);
     }
 
     /**
-     * @Description 更新延迟容错信息
-     * @param       brokerName
-     * @param       currentLatency
-     * @param       isolation
-     * @return      void
+     * 更新延迟容错信息
+     * 当 Producer 发送消息时间过长，则逻辑认为N秒内不可用。按照latencyMax，notAvailableDuration的配置，对应如下：
+     * | Producer发送消息消耗时长 | Broker不可用时长 |
+     * | — | — |
+     * | >= 15000 ms | 600 1000 ms |
+     * | >= 3000 ms | 180 1000 ms |
+     * | >= 2000 ms | 120 1000 ms |
+     * | >= 1000 ms | 60 1000 ms |
+     * | >= 550 ms | 30 * 1000 ms |
+     * | >= 100 ms | 0 ms |
+     * | >= 50 ms | 0 ms |
+     *
+     * @param brokerName     brokerName
+     * @param currentLatency 延迟
+     * @param isolation      是否隔离。当开启隔离时，默认延迟为30000。目前主要用于发送消息异常时
      **/
     public void updateFaultItem(final String brokerName, final long currentLatency, boolean isolation) {
         if (this.sendLatencyFaultEnable) {
             long duration = computeNotAvailableDuration(isolation ? 30000 : currentLatency);
+            // <a> 接口和实现方法都看下
             this.latencyFaultTolerance.updateFaultItem(brokerName, currentLatency, duration);
         }
     }
 
     /**
-     * @Description 计算延迟对应的不可用时间
-     * @param       currentLatency
-     * @return      long
-     **/
+     * 计算延迟对应的不可用时间
+     *
+     * @param currentLatency 延迟
+     * @return 不可用时间
+     */
     private long computeNotAvailableDuration(final long currentLatency) {
         for (int i = latencyMax.length - 1; i >= 0; i--) {
             if (currentLatency >= latencyMax[i])
