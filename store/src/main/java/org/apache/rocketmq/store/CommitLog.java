@@ -533,13 +533,6 @@ public class CommitLog {
         return beginTimeInLock;
     }
 
-    /**
-     * 【入口】高可用 - Broker高可用 - Broker主从 - 3.1.6 Master_SYNC - 同步双写实现
-     * Producer 发送消息时，Master_SYNC节点 会等待 Slave节点 存储完毕后再返回发送结果
-     *
-     * @param msg
-     * @return
-     */
     public PutMessageResult putMessage(final MessageExtBrokerInner msg) {
         // 下面（可能是处理发送的代码）都没有注释，直接到<a>
         // Set the storage time
@@ -648,7 +641,6 @@ public class CommitLog {
         storeStatsService.getSinglePutMessageTopicSizeTotal(topic).addAndGet(result.getWroteBytes());
 
         handleDiskFlush(result, putMessageResult, msg);
-        // <a>
         handleHA(result, putMessageResult, msg);
 
         return putMessageResult;
@@ -681,6 +673,14 @@ public class CommitLog {
         }
     }
 
+    /**
+     * 【入口】高可用 - Broker高可用 - Broker主从 - 3.1.6 Master_SYNC - 同步双写实现
+     * Producer 发送消息时，Master_SYNC节点 会等待 Slave节点 存储完毕后再返回发送结果
+     *
+     * @param result
+     * @param putMessageResult
+     * @param messageExt
+     */
     public void handleHA(AppendMessageResult result, PutMessageResult putMessageResult, MessageExt messageExt) {
         // Synchronous write double 如果是同步Master，同步到从节点
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
