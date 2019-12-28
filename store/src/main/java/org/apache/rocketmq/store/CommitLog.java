@@ -533,7 +533,15 @@ public class CommitLog {
         return beginTimeInLock;
     }
 
+    /**
+     * 【入口】高可用 - Broker高可用 - Broker主从 - 3.1.6 Master_SYNC - 同步双写实现
+     * Producer 发送消息时，Master_SYNC节点 会等待 Slave节点 存储完毕后再返回发送结果
+     *
+     * @param msg
+     * @return
+     */
     public PutMessageResult putMessage(final MessageExtBrokerInner msg) {
+        // 下面（可能是处理发送的代码）都没有注释，直接到<a>
         // Set the storage time
         msg.setStoreTimestamp(System.currentTimeMillis());
         // Set the message body BODY CRC (consider the most appropriate setting
@@ -640,6 +648,7 @@ public class CommitLog {
         storeStatsService.getSinglePutMessageTopicSizeTotal(topic).addAndGet(result.getWroteBytes());
 
         handleDiskFlush(result, putMessageResult, msg);
+        // <a>
         handleHA(result, putMessageResult, msg);
 
         return putMessageResult;
@@ -673,6 +682,7 @@ public class CommitLog {
     }
 
     public void handleHA(AppendMessageResult result, PutMessageResult putMessageResult, MessageExt messageExt) {
+        // Synchronous write double 如果是同步Master，同步到从节点
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
             HAService service = this.defaultMessageStore.getHaService();
             if (messageExt.isWaitStoreMsgOK()) {
@@ -680,6 +690,11 @@ public class CommitLog {
                 if (service.isSlaveOK(result.getWroteOffset() + result.getWroteBytes())) {
                     GroupCommitRequest request = new GroupCommitRequest(result.getWroteOffset() + result.getWroteBytes());
                     service.putRequest(request);
+                    /*
+                    唤醒 WriteSocketService。
+                    1、唤醒后，WriteSocketService 挂起等待新消息结束，Master 传输 Slave 新的 CommitLog 数据。
+                    2、Slave 收到数据后，立即上报最新的 CommitLog 同步进度到 Master。ReadSocketService 唤醒下面flushOK的：request#waitForFlush(...)。
+                     */
                     service.getWaitNotifyObject().wakeupAll();
                     boolean flushOK =
                         request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
