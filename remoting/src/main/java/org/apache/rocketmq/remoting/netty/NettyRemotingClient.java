@@ -407,6 +407,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     }
 
     /**
+     * 【入口】高可用 - Namesrv 高可用 - 2.2 Producer、Consumer 访问 Namesrv
      * Producer、Consumer 从 Namesrv列表选择一个可连接的进行通信
      *
      * @return
