@@ -91,7 +91,7 @@ public class MQFaultStrategy {
                     }
                 }
 
-                // 选择一个相对好的broker，并获得其对应的一个消息队列，不考虑该队列的可用性 <a>
+                // 选择一个相对好的broker，并获得其对应的一个消息队列，不考虑该队列的可用性 <iii>
                 final String notBestBroker = latencyFaultTolerance.pickOneAtLeast();
                 int writeQueueNums = tpInfo.getQueueIdByBroker(notBestBroker);
                 if (writeQueueNums > 0) {
@@ -136,7 +136,7 @@ public class MQFaultStrategy {
     public void updateFaultItem(final String brokerName, final long currentLatency, boolean isolation) {
         if (this.sendLatencyFaultEnable) {
             long duration = computeNotAvailableDuration(isolation ? 30000 : currentLatency);
-            // <a> 接口和实现方法都看下
+            // <iii> 接口和实现方法都看下
             this.latencyFaultTolerance.updateFaultItem(brokerName, currentLatency, duration);
         }
     }

@@ -276,7 +276,7 @@ public class HAService {
         }
 
         /**
-         * 【入口】高可用 - Broker高可用 - Broker主从 - 3.1.6 Master_SYNC - 接收 Slave 同步进度
+         * 【入口】九、高可用 - Broker高可用 - Broker主从 - 3.1.6 Master_SYNC - 接收 Slave 同步进度
          */
         private void doWaitTransfer() {
             synchronized (this.requestsRead) {
@@ -423,7 +423,7 @@ public class HAService {
                     if (readSize > 0) {
                         lastWriteTimestamp = HAService.this.defaultMessageStore.getSystemClock().now();
                         readSizeZeroTimes = 0;
-                        // <a>
+                        // <iii>
                         boolean result = this.dispatchReadRequest();
                         if (!result) {
                             log.error("HAClient, dispatchReadRequest error");
@@ -447,7 +447,7 @@ public class HAService {
         }
 
         /**
-         * 取Master传输的CommitLog数据，并返回是异常（接收下发的数据）
+         * 取Master传输过来的CommitLog数据，并返回是否异常（接收下发的数据）
          * 如果读取到数据，写入CommitLog
          * 异常原因：
          *   1. Master传输来的数据offset 不等于 Slave的CommitLog数据最大offset
@@ -517,7 +517,7 @@ public class HAService {
             long currentPhyOffset = HAService.this.defaultMessageStore.getMaxPhyOffset();
             if (currentPhyOffset > this.currentReportedOffset) {
                 this.currentReportedOffset = currentPhyOffset;
-                // <a>
+                // <iii>
                 result = this.reportSlaveMaxOffset(this.currentReportedOffset);
                 if (!result) {
                     this.closeMaster();
@@ -579,7 +579,7 @@ public class HAService {
 
         @Override
         public void run() {
-            // 【入口】高可用 - Broker高可用 - Broker主从 - 3.1.4 Slave ： Slave 主循环，实现了不断不断不断从 Master 传输 CommitLog 数据，上传 Master 自己本地的 CommitLog 已经同步物理位置。
+            // 【入口】九、高可用 - Broker高可用 - Broker主从 - 3.1.4 Slave ： Slave 主循环，实现了不断不断不断拿 Master 传输 CommitLog 数据，给 Master 上传自己本地的 CommitLog 已经同步物理位置。
 
             // 【约定一下】：Master 向 Slave 发起的东西，叫下发；Slave 向 Master 发起的东西，叫上报
             log.info(this.getServiceName() + " service started");
@@ -600,13 +600,13 @@ public class HAService {
                         // 下面两段 ： 处理 Master 传输 Slave 的 CommitLog 数据
                         this.selector.select(1000);
 
-                        // 处理读取事件 <a>
+                        // 处理读取事件 <iii>
                         boolean ok = this.processReadEvent();
                         if (!ok) {
                             this.closeMaster();
                         }
 
-                        // 若进度有变化，上报到Master进度 <b>
+                        // 若进度有变化，上报到Master进度 <iii>
                         if (!reportSlaveMaxOffsetPlus()) {
                             continue;
                         }

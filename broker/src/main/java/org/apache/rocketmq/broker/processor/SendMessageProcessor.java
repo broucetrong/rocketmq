@@ -63,7 +63,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
     }
 
     /**
-     * 【入口】Message 发送与接收 - Broker 接收消息
+     * 【入口】三、Message 发送与接收 - Broker 接收消息
      * 处理接收的消息请求
      *
      * @param ctx
@@ -95,7 +95,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 if (requestHeader.isBatch()) {
                     response = this.sendBatchMessage(ctx, request, mqtraceContext, requestHeader);
                 } else {
-                    // <a>
+                    // <iii>
                     response = this.sendMessage(ctx, request, mqtraceContext, requestHeader);
                 }
 
@@ -350,7 +350,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
         // 消息配置（Topic配置）校验
         response.setCode(-1);
-        // <a>  消息配置(Topic配置）校验，详细解析见：AbstractSendMessageProcessor#msgCheck()
+        // <iii>  消息配置(Topic配置）校验，详细解析见：AbstractSendMessageProcessor#msgCheck()
         super.msgCheck(ctx, requestHeader, response);
         if (response.getCode() != -1) {
             return response;
@@ -371,7 +371,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         msgInner.setTopic(requestHeader.getTopic());
         msgInner.setQueueId(queueIdInt);
 
-        //处理是否重试和死信 <b>
+        //处理是否重试和死信 <iii>
         if (!handleRetryAndDLQ(requestHeader, response, request, msgInner, topicConfig)) {
             return response;
         }
@@ -398,11 +398,11 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             }
             putMessageResult = this.brokerController.getTransactionalMessageService().prepareMessage(msgInner);
         } else {
-            // 存储消息，详细解析见：DefaultMessageStore#putMessage()  <c>
+            // 存储消息，详细解析见：DefaultMessageStore#putMessage()  <iii>
             putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
         }
 
-        // 添加消息 <d>
+        // 添加消息 <iii>
         return handlePutMessageResult(putMessageResult, response, request, msgInner, responseHeader, sendMessageContext, ctx, queueIdInt);
 
     }
@@ -587,7 +587,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         messageExtBatch.setStoreHost(this.getStoreHost());
         messageExtBatch.setReconsumeTimes(requestHeader.getReconsumeTimes() == null ? 0 : requestHeader.getReconsumeTimes());
 
-        // <a>
+        // <iii>
         PutMessageResult putMessageResult = this.brokerController.getMessageStore().putMessages(messageExtBatch);
 
         return handlePutMessageResult(putMessageResult, response, request, messageExtBatch, responseHeader, sendMessageContext, ctx, queueIdInt);

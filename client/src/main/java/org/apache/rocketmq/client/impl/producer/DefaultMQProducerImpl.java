@@ -547,17 +547,17 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         long beginTimestampFirst = System.currentTimeMillis();
         long beginTimestampPrev = beginTimestampFirst;
         long endTimestamp = beginTimestampFirst;
-        // 获取 Topic路由信息（Producer 发送消息时，会对 Broker集群 的所有队列进行选择）     <a>
+        // 获取 Topic路由信息（Producer 发送消息时，会对 Broker集群 的所有队列进行选择）     <iii>
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
         if (topicPublishInfo != null && topicPublishInfo.ok()) {
             boolean callTimeout = false;
             // 最后选择消息要发送到的队列实例
             MessageQueue mq = null;
             Exception exception = null;
-            // 最后一次发送结果（下面四行代码：计算调用发送消息到成功为止的最大次数，并进行循环。同步或异步发送消息会调用多次，默认配置为3次）
+            // 最后一次发送结果（下面四行代码：计算参数 - 调用发送消息到成功为止的最大次数，并进行循环。同步或异步发送消息会调用多次，默认配置为3次）
             SendResult sendResult = null;
             int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
-            //第几次发送
+            // 第几次发送
             int times = 0;
             // 存储每次发送消息选择的broker名
             String[] brokersSent = new String[timesTotal];
@@ -565,7 +565,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             for (; times < timesTotal; times++) {
                 // lastBrokerName第一次就是null，重试的时候才会有值
                 String lastBrokerName = null == mq ? null : mq.getBrokerName();
-                // 选择消息要发送到的队列   <b> 点两层
+                // 选择消息要发送到的队列   <iii> 点两层
                 MessageQueue mqSelected = this.selectOneMessageQueue(topicPublishInfo, lastBrokerName);
                 if (mqSelected != null) {
                     mq = mqSelected;
@@ -574,7 +574,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         beginTimestampPrev = System.currentTimeMillis();
                         if (times > 0) {
                             //Reset topic with namespace during resend.
-                            // 在重发过程中使用namespace重置主题。
+                            // 在重发过程中使用namespace重置主题。 <iii>
                             msg.setTopic(this.defaultMQProducer.withNamespace(msg.getTopic()));
                         }
                         long costTime = beginTimestampPrev - beginTimestampFirst;
@@ -583,10 +583,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                             break;
                         }
 
-                        // 调用发送消息核心方法     <c>
+                        // 调用发送消息核心方法     <iii>
                         sendResult = this.sendKernelImpl(msg, mq, communicationMode, sendCallback, topicPublishInfo, timeout - costTime);
                         endTimestamp = System.currentTimeMillis();
-                        // 更新Broker可用性信息,在选择发送到的消息队列时，会参考Broker发送消息的延迟 <d>
+                        // 更新Broker可用性信息,在选择发送到的消息队列时，会参考Broker发送消息的延迟 <iii>
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false);
                         switch (communicationMode) {
                             case ASYNC:
